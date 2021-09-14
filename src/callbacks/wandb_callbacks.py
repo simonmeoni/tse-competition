@@ -116,6 +116,41 @@ class UploadCheckpointsAsArtifact(Callback):
         experiment.log_artifact(ckpts)
 
 
+class UploadModelsAsArtifact(Callback):
+    """Upload checkpoints to wandb as an artifact, at the end of run."""
+
+    def __init__(
+        self,
+        model_dir: str = "checkpoints/",
+        upload_best_only: bool = False,
+        name=None,
+        aliases=None,
+    ):
+        self.model_dir = model_dir
+        self.upload_best_only = upload_best_only
+        self.name = name
+        self.aliases = aliases
+
+    @rank_zero_only
+    def on_keyboard_interrupt(self, trainer, pl_module):
+        self.on_train_end(trainer, pl_module)
+
+    @rank_zero_only
+    def on_train_end(self, trainer, pl_module):
+        logger = get_wandb_logger(trainer=trainer)
+        experiment = logger.experiment
+
+        models = wandb.Artifact(self.name, type="models")
+
+        if self.upload_best_only:
+            models.add_file(trainer.checkpoint_callback.best_model_path)
+        else:
+            for path in Path(self.model_dir).rglob("*.ckpt"):
+                models.add_file(str(path))
+
+        experiment.log_artifact(models, aliases=self.aliases)
+
+
 class LogConfusionMatrix(Callback):
     """Generate confusion matrix every epoch and send it to wandb.
     Expects validation step to return predictions and targets.

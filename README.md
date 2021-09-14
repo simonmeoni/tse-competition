@@ -322,9 +322,9 @@ python run.py -m datamodule.batch_size=32,64,128 model.lr=0.001,0.0005
 <details>
 <summary><b>Create a sweep over hyperparameters with Optuna</b></summary>
 
-> Using [Optuna Sweeper](https://hydra.cc/docs/next/plugins/optuna_sweeper) plugin doesn't require you to code any boilerplate into your pipeline, everything is defined in a [single config file](configs/hparams_search/mnist_optuna.yaml)!
+> Using [Optuna Sweeper](https://hydra.cc/docs/next/plugins/optuna_sweeper) plugin doesn't require you to code any boilerplate into your pipeline, everything is defined in a [single config file](configs/hparams_search/tse_optuna.yaml)!
 ```yaml
-# this will run hyperparameter search defined in `configs/hparams_search/mnist_optuna.yaml`
+# this will run hyperparameter search defined in `configs/hparams_search/tse_optuna.yaml`
 # over chosen experiment config
 python run.py -m hparams_search=mnist_optuna experiment=example_simple
 ```
@@ -428,8 +428,8 @@ It also specifies everything that shouldn't be managed by experiment configurati
 # specify here default training configuration
 defaults:
     - trainer: default.yaml
-    - model: mnist_model.yaml
-    - datamodule: mnist_datamodule.yaml
+    - model: tse_model.yaml
+    - datamodule: tse_datamodule.yaml
     - callbacks: default.yaml  # set this to null if you don't want to use callbacks
     - logger: null  # set logger here or use command line (e.g. `python run.py logger=wandb`)
 
@@ -474,8 +474,8 @@ Experiment configurations allow you to overwrite parameters from main project co
 
 defaults:
     - override /trainer: default.yaml
-    - override /model: mnist_model.yaml
-    - override /datamodule: mnist_datamodule.yaml
+    - override /model: tse_model.yaml
+    - override /datamodule: tse_datamodule.yaml
     - override /callbacks: default.yaml
     - override /logger: null
 
@@ -559,8 +559,8 @@ logger:
 <br>
 
 ### Workflow
-1. Write your PyTorch Lightning model (see [mnist_model.py](src/models/mnist_model.py) for example)
-2. Write your PyTorch Lightning datamodule (see [mnist_datamodule.py](src/datamodules/mnist_datamodule.py) for example)
+1. Write your PyTorch Lightning model (see [mnist_model.py](src/models/tse_model.py) for example)
+2. Write your PyTorch Lightning datamodule (see [mnist_datamodule.py](src/datamodules/tse_datamodule.py) for example)
 3. Write your experiment config, containing paths to your model and datamodule
 4. Run training with chosen experiment config: `python run.py experiment=experiment_name`
 <br>
@@ -612,7 +612,7 @@ These tools help you keep track of hyperparameters and output metrics and allow 
  ```
 You can use many of them at once (see [configs/logger/many_loggers.yaml](configs/logger/many_loggers.yaml) for example).<br>
 You can also write your own logger.<br>
-Lightning provides convenient method for logging custom metrics from inside LightningModule. Read the docs [here](https://pytorch-lightning.readthedocs.io/en/latest/extensions/logging.html#automatic-logging) or take a look at [MNIST example](src/models/mnist_model.py).
+Lightning provides convenient method for logging custom metrics from inside LightningModule. Read the docs [here](https://pytorch-lightning.readthedocs.io/en/latest/extensions/logging.html#automatic-logging) or take a look at [MNIST example](src/models/tse_model.py).
 <br><br>
 
 
@@ -698,52 +698,52 @@ The following is example of loading model from checkpoint and running prediction
 from PIL import Image
 from torchvision import transforms
 
-from src.models.mnist_model import MNISTLitModel
+from src.models.tse_model import TSEModel
 
 
 def predict():
-    """Example of inference with trained model.
-    It loads trained image classification model from checkpoint.
-    Then it loads example image and predicts its label.
-    """
+   """Example of inference with trained model.
+   It loads trained image classification model from checkpoint.
+   Then it loads example image and predicts its label.
+   """
 
-    # ckpt can be also a URL!
-    CKPT_PATH = "last.ckpt"
+   # ckpt can be also a URL!
+   CKPT_PATH = "last.ckpt"
 
-    # load model from checkpoint
-    # model __init__ parameters will be loaded from ckpt automatically
-    # you can also pass some parameter explicitly to override it
-    trained_model = MNISTLitModel.load_from_checkpoint(checkpoint_path=CKPT_PATH)
+   # load model from checkpoint
+   # model __init__ parameters will be loaded from ckpt automatically
+   # you can also pass some parameter explicitly to override it
+   trained_model = TSEModel.load_from_checkpoint(checkpoint_path=CKPT_PATH)
 
-    # print model hyperparameters
-    print(trained_model.hparams)
+   # print model hyperparameters
+   print(trained_model.hparams)
 
-    # switch to evaluation mode
-    trained_model.eval()
-    trained_model.freeze()
+   # switch to evaluation mode
+   trained_model.eval()
+   trained_model.freeze()
 
-    # load data
-    img = Image.open("data/example_img.png").convert("L")  # convert to black and white
-    # img = Image.open("data/example_img.png").convert("RGB")  # convert to RGB
+   # load data
+   img = Image.open("data/example_img.png").convert("L")  # convert to black and white
+   # img = Image.open("data/example_img.png").convert("RGB")  # convert to RGB
 
-    # preprocess
-    mnist_transforms = transforms.Compose(
-        [
-            transforms.ToTensor(),
-            transforms.Resize((28, 28)),
-            transforms.Normalize((0.1307,), (0.3081,)),
-        ]
-    )
-    img = mnist_transforms(img)
-    img = img.reshape((1, *img.size()))  # reshape to form batch of size 1
+   # preprocess
+   mnist_transforms = transforms.Compose(
+      [
+         transforms.ToTensor(),
+         transforms.Resize((28, 28)),
+         transforms.Normalize((0.1307,), (0.3081,)),
+      ]
+   )
+   img = mnist_transforms(img)
+   img = img.reshape((1, *img.size()))  # reshape to form batch of size 1
 
-    # inference
-    output = trained_model(img)
-    print(output)
+   # inference
+   output = trained_model(img)
+   print(output)
 
 
 if __name__ == "__main__":
-    predict()
+   predict()
 
 ```
 

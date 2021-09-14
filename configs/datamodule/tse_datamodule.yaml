@@ -1,0 +1,7 @@
+_target_: src.datamodules.tse_datamodule.TSEDataModule
+
+data_dir: ${data_dir} # data_dir is specified in config.yaml
+batch_size: 32
+tokenizer: roberta-base
+num_workers: 0
+pin_memory: False
