@@ -1,16 +1,10 @@
-from typing import Optional, Tuple
+from typing import Optional
 
 import pandas as pd
 import torch
 from pytorch_lightning import LightningDataModule
-from torch.utils.data import (
-    BatchSampler,
-    ConcatDataset,
-    DataLoader,
-    Dataset,
-    SequentialSampler,
-    random_split,
-)
+from sklearn.model_selection import StratifiedKFold
+from torch.utils.data import BatchSampler, DataLoader, Dataset, Subset, SubsetRandomSampler
 from transformers import AutoTokenizer
 
 
@@ -52,9 +46,13 @@ class TSEDataModule(LightningDataModule):
         max_length: int = 256,
         pin_memory: bool = False,
         tokenizer: str = "roberta-base",
+        k_folds: int = 5,
+        current_fold: int = 0,
     ):
         super().__init__()
 
+        self.current_fold = current_fold
+        self.k_folds = k_folds
         self.data_dir = data_dir
         self.train_val_split = train_val_test_split
         self.batch_size = batch_size
@@ -63,8 +61,8 @@ class TSEDataModule(LightningDataModule):
         self.pin_memory = pin_memory
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer)
         self.max_length = max_length
-        self.data_train: Optional[Dataset] = None
-        self.data_val: Optional[Dataset] = None
+        self.data_train: Optional[Subset] = None
+        self.data_val: Optional[Subset] = None
         self.full_dataset = None
 
     def prepare_data(self):
@@ -94,10 +92,19 @@ class TSEDataModule(LightningDataModule):
         self.full_dataset = TSEDataset(csv)
 
     def setup(self, stage: Optional[str] = None):
-        """Load data. Set variables: self.data_train, self.data_val, self.data_test."""
-        split_train = int(len(self.full_dataset) * self.train_val_split)
-        split_val = len(self.full_dataset) - split_train
-        self.data_train, self.data_val = random_split(self.full_dataset, [split_train, split_val])
+        """Load data. Set variables: self.data_train, self.data_val."""
+        stratified_k_fold = StratifiedKFold(n_splits=self.k_folds, shuffle=True)
+        data_train_ids, data_val_ids = list(
+            stratified_k_fold.split(
+                self.full_dataset,
+                [
+                    1 if sentiment == "positive?" else 0
+                    for sentiment in self.full_dataset.dataset["question"]
+                ],
+            )
+        )[self.current_fold]
+        self.data_train = Subset(self.full_dataset, data_train_ids)
+        self.data_val = Subset(self.full_dataset, data_val_ids)
 
     def train_dataloader(self):
         return DataLoader(
@@ -106,7 +113,6 @@ class TSEDataModule(LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
             collate_fn=self.collate_fn,
-            shuffle=True,
         )
 
     def val_dataloader(self):
@@ -116,7 +122,6 @@ class TSEDataModule(LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
             collate_fn=self.collate_fn,
-            shuffle=True,
         )
 
     def collate_fn(self, batch):

@@ -15,4 +15,4 @@ upload_models_as_artifact:
   model_dir: "checkpoints/"
   upload_best_only: False
   name: "roberta-base"
-  aliases: ["baseline"]
+  aliases: ["baseline", "k-fold"]

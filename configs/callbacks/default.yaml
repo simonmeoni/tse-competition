@@ -7,7 +7,7 @@ model_checkpoint:
   save_weights_only: True
   verbose: False
   dirpath: "checkpoints/"
-  filename: "epoch_{epoch:03d}"
+  filename: "epoch_{epoch:03d}_jaccard_{val/jaccard:.3f}"
   auto_insert_metric_name: False
 
 early_stopping:

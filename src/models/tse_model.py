@@ -45,6 +45,7 @@ class TSEModel(LightningModule):
         # to ensure a proper reduction over the epoch
         self.val_jaccard = Jaccard()
         self.train_jaccard = Jaccard()
+        self.best_val_jaccard = 0
 
     def forward(self, x):
         return self.model(**x)
@@ -71,10 +72,7 @@ class TSEModel(LightningModule):
         preds = self.convert_pred_response(x, start, end)
         # log train metrics
         self.log("train/loss", loss)
-        self.log(
-            "train/jaccard",
-            self.train_jaccard(preds, y),
-        )
+        self.log("train/jaccard", self.train_jaccard(preds, y), on_epoch=True, on_step=True)
         # we can return here dict with any tensors
         # and then read it in some callback or in training_epoch_end() below
         # remember to always return loss from training_step, or else backpropagation will fail!
@@ -91,9 +89,11 @@ class TSEModel(LightningModule):
 
         # log val metrics
         self.log("val/loss", loss, on_step=False, on_epoch=True, prog_bar=False)
+        val_jaccard = self.val_jaccard(preds, y)
+
         self.log(
             "val/jaccard",
-            self.val_jaccard(preds, y),
+            val_jaccard,
             on_step=False,
             on_epoch=True,
             prog_bar=False,
@@ -101,7 +101,10 @@ class TSEModel(LightningModule):
         return {"loss": loss}
 
     def validation_epoch_end(self, outputs: List[Any]):
-        pass
+        val_jaccard = self.trainer.logged_metrics["val/jaccard"].cpu().item()
+        if self.best_val_jaccard < val_jaccard:
+            self.best_val_jaccard = val_jaccard
+        self.log("val/best_jaccard", self.best_val_jaccard, on_epoch=True)
 
     def configure_optimizers(self):
         """Choose what optimizers and learning-rate schedulers to use in your optimization.

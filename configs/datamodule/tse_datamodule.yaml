@@ -5,3 +5,5 @@ batch_size: 32
 tokenizer: roberta-base
 num_workers: 0
 pin_memory: False
+k_folds: 5
+current_fold: 0
