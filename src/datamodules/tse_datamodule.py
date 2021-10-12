@@ -1,10 +1,12 @@
+import re
+import string
 from typing import Optional
 
 import pandas as pd
 import torch
 from pytorch_lightning import LightningDataModule
 from sklearn.model_selection import StratifiedKFold
-from torch.utils.data import BatchSampler, DataLoader, Dataset, Subset, SubsetRandomSampler
+from torch.utils.data import BatchSampler, DataLoader, Dataset, Subset
 from transformers import AutoTokenizer
 
 
@@ -71,9 +73,23 @@ class TSEDataModule(LightningDataModule):
         csv["start_positions"] = ""
         csv["end_positions"] = ""
 
+        def preprocess_text(text):
+            # text = re.sub(r"http\S+", "URL", text)
+            # text = re.sub(r"www\.[a-zA-Z].\S+", "URL", text)
+            text = text.replace("ï¿½", "`")
+            text = text.replace("ï", "")
+            # text = re.sub(r"(.)\1+", r"\1\1", text)
+            # text = text[1:] if text[0] == "." else text
+            # text = text.strip()
+            text = text.replace("Aam   these", "these")
+            text = text.replace("Aam  these", "these")
+            text = text.replace("d stinks", "stinks")
+            text = text.replace("Wave looks interesting. ht", "Wave looks interesting.")
+            return text
+
         for index, example in csv.iterrows():
-            context = example["text"].strip()
-            response = example["selected_text"].strip()
+            context = preprocess_text(example["text"])
+            response = preprocess_text(example["selected_text"])
             question = example["sentiment"] + "?"
             encodings = self.tokenizer(
                 question,
