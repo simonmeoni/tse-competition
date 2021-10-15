@@ -28,6 +28,7 @@ class TSEModel(LightningModule):
         lr: float = 0.001,
         weight_decay: float = 0.0005,
         correct_bias=False,
+        freeze_layers=0,
     ):
         super().__init__()
 
@@ -37,10 +38,12 @@ class TSEModel(LightningModule):
 
         self.model = AutoModelForQuestionAnswering.from_pretrained(model)
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer)
-
+        self.freeze_layers(freeze_layers)
         # loss function
         self.criterion = torch.nn.CrossEntropyLoss()
         self.correct_bias = correct_bias
+        self.lr = lr
+        self.weight_decay = weight_decay
         # use separate metric instance for train, val and test step
         # to ensure a proper reduction over the epoch
         self.val_jaccard = Jaccard()
@@ -49,6 +52,16 @@ class TSEModel(LightningModule):
 
     def forward(self, x):
         return self.model(**x)
+
+    def freeze_layers(self, n_freeze_layers):
+        if n_freeze_layers > 0:
+            print(f"Freeze the first {n_freeze_layers} Layers ...")
+            for param in self.model.roberta.embeddings.parameters():
+                param.requires_grad = False
+            for layer in self.model.roberta.encoder.layer[:n_freeze_layers]:
+                for params in layer.parameters():
+                    params.requires_grad = False
+            print("Done.!")
 
     def step(self, batch: Any):
         outputs = self.forward(batch)
@@ -115,7 +128,7 @@ class TSEModel(LightningModule):
         """
         return AdamW(
             params=self.parameters(),
-            lr=self.hparams.lr,
-            weight_decay=self.hparams.weight_decay,
-            correct_bias=self.hparams.correct_bias,
+            lr=self.lr,
+            weight_decay=self.weight_decay,
+            correct_bias=self.correct_bias,
         )

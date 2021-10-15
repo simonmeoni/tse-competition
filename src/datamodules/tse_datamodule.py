@@ -68,16 +68,21 @@ class TSEDataModule(LightningDataModule):
         self.full_dataset = None
 
     def prepare_data(self):
-        csv = pd.read_csv(self.data_dir)
-        csv = csv[csv["sentiment"] != "neutral"]
+        csv = pd.read_csv(self.data_dir).dropna()
+        # csv = csv[csv["sentiment] != "neutral"]
         csv["start_positions"] = ""
         csv["end_positions"] = ""
 
         def preprocess_text(text):
             # text = re.sub(r"http\S+", "URL", text)
             # text = re.sub(r"www\.[a-zA-Z].\S+", "URL", text)
-            text = text.replace("ï¿½", "`")
+            text = str(text).replace("ï¿½", "`")
             text = text.replace("ï", "")
+            # text = text.replace(".", ". ")
+            # text = text.replace("!", "! ")
+            # text = text.replace("?", "? ")
+            # if text[-1] == " ":
+            #     text = text[:-1]
             # text = re.sub(r"(.)\1+", r"\1\1", text)
             # text = text[1:] if text[0] == "." else text
             # text = text.strip()
