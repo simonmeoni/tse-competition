@@ -1,0 +1,6 @@
+_target_: src.models.tse_model.TSEModel
+lr: 2e-5
+weight_decay: 0.0001
+correct_bias: False
+model: "deepset/roberta-base-squad2"
+tokenizer: "deepset/roberta-base-squad2"
