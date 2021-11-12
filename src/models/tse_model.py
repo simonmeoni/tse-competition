@@ -37,6 +37,7 @@ class TSEModel(LightningModule):
         freeze_layers=0,
         layerwise_learning_rate_decay=0,
         cosine_lr=False,
+        warm_up_steps=0.
     ):
         super().__init__()
 
@@ -59,7 +60,7 @@ class TSEModel(LightningModule):
         self.best_val_jaccard = 0
         self.layerwise_learning_rate_decay = layerwise_learning_rate_decay
         self.cosine_lr = cosine_lr
-        self.warm_up_steps = 0.1
+        self.warm_up_steps = warm_up_steps
 
     def forward(self, x):
         return self.model(**x)
