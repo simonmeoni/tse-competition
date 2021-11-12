@@ -1,9 +1,15 @@
+import math
 from typing import Any, List
 
 import torch
 from pytorch_lightning import LightningModule
-from torchmetrics.classification.accuracy import Accuracy
-from transformers import AdamW, AutoModelForQuestionAnswering, AutoTokenizer
+from torch.optim.lr_scheduler import CosineAnnealingLR
+from transformers import (
+    AdamW,
+    AutoModelForQuestionAnswering,
+    AutoTokenizer,
+    get_cosine_schedule_with_warmup,
+)
 
 from src.metrics.jaccard import Jaccard
 
@@ -29,6 +35,8 @@ class TSEModel(LightningModule):
         weight_decay: float = 0.0005,
         correct_bias=False,
         freeze_layers=0,
+        layerwise_learning_rate_decay=0,
+        cosine_lr=False,
     ):
         super().__init__()
 
@@ -49,6 +57,9 @@ class TSEModel(LightningModule):
         self.val_jaccard = Jaccard()
         self.train_jaccard = Jaccard()
         self.best_val_jaccard = 0
+        self.layerwise_learning_rate_decay = layerwise_learning_rate_decay
+        self.cosine_lr = cosine_lr
+        self.warm_up_steps = 0.1
 
     def forward(self, x):
         return self.model(**x)
@@ -65,8 +76,8 @@ class TSEModel(LightningModule):
 
     def step(self, batch: Any):
         outputs = self.forward(batch)
-        start = self.model(**batch).start_logits.argmax(dim=1)
-        end = self.model(**batch).end_logits.argmax(dim=1)
+        start = outputs.start_logits.argmax(dim=1)
+        end = outputs.end_logits.argmax(dim=1)
         return outputs.loss, start, end
 
     def convert_pred_response(self, x, start, end):
@@ -85,7 +96,9 @@ class TSEModel(LightningModule):
         preds = self.convert_pred_response(x, start, end)
         # log train metrics
         self.log("train/loss", loss)
-        self.log("train/jaccard", self.train_jaccard(preds, y), on_epoch=True, on_step=True)
+        self.log(
+            "train/jaccard", self.train_jaccard(preds, y), on_epoch=True, on_step=True
+        )
         # we can return here dict with any tensors
         # and then read it in some callback or in training_epoch_end() below
         # remember to always return loss from training_step, or else backpropagation will fail!
@@ -126,9 +139,97 @@ class TSEModel(LightningModule):
         See examples here:
             https://pytorch-lightning.readthedocs.io/en/latest/common/lightning_module.html#configure-optimizers
         """
-        return AdamW(
-            params=self.parameters(),
-            lr=self.lr,
-            weight_decay=self.weight_decay,
-            correct_bias=self.correct_bias,
+        print("Using layer-wise learning rate decay")
+        params = list(self.named_parameters())
+        if self.layerwise_learning_rate_decay != 0:
+            grouped_parameters = self.get_optimizer_grouped_parameters(
+                layerwise_learning_rate_decay=self.layerwise_learning_rate_decay,
+            )
+            optimizer = AdamW(
+                params=grouped_parameters,
+                lr=self.lr,
+                weight_decay=self.weight_decay,
+                correct_bias=self.correct_bias,
+            )
+            return optimizer
+        elif self.cosine_lr:
+            optimizer = AdamW(
+                params=self.parameters(),
+                lr=self.lr,
+                weight_decay=self.weight_decay,
+                correct_bias=self.correct_bias,
+            )
+            num_batches = len(self.train_dataloader()) * self.trainer.max_epochs
+            num_warm_up_steps = (num_batches * self.warm_up_steps) / 100
+            num_training_steps = num_batches - num_warm_up_steps
+            return {
+                "lr_scheduler": {
+                    "scheduler": get_cosine_schedule_with_warmup(
+                        optimizer,
+                        num_warmup_steps=num_warm_up_steps,
+                        num_training_steps=num_training_steps,
+                    )
+                },
+                "optimizer": optimizer,
+            }
+        else:
+            return AdamW(
+                params=self.parameters(),
+                lr=self.lr,
+                weight_decay=self.weight_decay,
+                correct_bias=self.correct_bias,
+            )
+
+    def get_optimizer_grouped_parameters(self, layerwise_learning_rate_decay):
+        no_decay = ["bias", "LayerNorm.weight"]
+        # initialize lrs for every layer
+        num_layers = self.model.config.num_hidden_layers
+        layers = [self.model.roberta.embeddings] + list(
+            self.model.roberta.encoder.layer
         )
+        layers.reverse()
+        lr = self.lr
+        optimizer_grouped_parameters = []
+        for layer in layers:
+            lr *= layerwise_learning_rate_decay
+            optimizer_grouped_parameters += [
+                {
+                    "params": [
+                        p
+                        for n, p in layer.named_parameters()
+                        if not any(nd in n for nd in no_decay)
+                    ],
+                    "weight_decay": self.weight_decay,
+                    "lr": lr,
+                },
+                {
+                    "params": [
+                        p
+                        for n, p in layer.named_parameters()
+                        if any(nd in n for nd in no_decay)
+                    ],
+                    "weight_decay": 0.0,
+                    "lr": lr,
+                },
+            ]
+        optimizer_grouped_parameters += [
+            {
+                "params": [
+                    p
+                    for n, p in self.model.qa_outputs.named_parameters()
+                    if not any(nd in n for nd in no_decay)
+                ],
+                "weight_decay": self.weight_decay,
+                "lr": lr,
+            },
+            {
+                "params": [
+                    p
+                    for n, p in self.model.qa_outputs.named_parameters()
+                    if any(nd in n for nd in no_decay)
+                ],
+                "weight_decay": 0.0,
+                "lr": lr,
+            },
+        ]
+        return optimizer_grouped_parameters
